@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea/
+.vscode/
+*.iml
+target/
+*.log
+*.md
+src/test/
