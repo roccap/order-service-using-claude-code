@@ -13,7 +13,5 @@ public record CreateOrderRequest(
 
         @NotEmpty(message = "Order must contain at least one item")
         @Valid
-        List<OrderItemRequest> items,
-
-        String notes
+        List<OrderItemRequest> items
 ) {}

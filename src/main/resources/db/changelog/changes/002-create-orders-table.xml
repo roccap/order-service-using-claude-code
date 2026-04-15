@@ -5,24 +5,33 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
 
-    <changeSet id="001-create-orders-table" author="order-service">
+    <changeSet id="002-create-orders-table" author="order-service">
         <createTable tableName="orders">
             <column name="id" type="UUID">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
-            <column name="order_number" type="VARCHAR(50)">
+            <column name="order_number" type="VARCHAR(12)">
                 <constraints nullable="false" unique="true" uniqueConstraintName="uq_orders_order_number"/>
             </column>
             <column name="customer_id" type="UUID">
-                <constraints nullable="false"/>
+                <constraints nullable="false"
+                             foreignKeyName="fk_orders_customer_id"
+                             references="customers(id)"/>
             </column>
             <column name="status" type="VARCHAR(20)">
                 <constraints nullable="false"/>
             </column>
-            <column name="total_amount" type="DECIMAL(19,4)">
+            <column name="total_amount" type="DECIMAL(12,2)">
                 <constraints nullable="false"/>
             </column>
-            <column name="notes" type="VARCHAR(2000)"/>
+            <column name="shipping_street" type="VARCHAR(255)"/>
+            <column name="shipping_city" type="VARCHAR(100)"/>
+            <column name="shipping_state" type="VARCHAR(100)"/>
+            <column name="shipping_zip_code" type="VARCHAR(20)"/>
+            <column name="shipping_country" type="VARCHAR(100)"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
             <column name="created_at" type="TIMESTAMP">
                 <constraints nullable="false"/>
             </column>

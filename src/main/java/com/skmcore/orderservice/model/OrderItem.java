@@ -18,6 +18,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -38,8 +39,8 @@ public class OrderItem {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    @Column(name = "product_id", nullable = false)
-    private UUID productId;
+    @Column(name = "product_id", nullable = false, length = 255)
+    private String productId;
 
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
@@ -47,15 +48,28 @@ public class OrderItem {
     @Column(nullable = false)
     private int quantity;
 
-    @Column(name = "unit_price", nullable = false, precision = 19, scale = 4)
+    @Column(name = "unit_price", nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
 
-    @Column(nullable = false, precision = 19, scale = 4)
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal;
 
     @PrePersist
     @PreUpdate
     void calculateSubtotal() {
         this.subtotal = this.unitPrice.multiply(BigDecimal.valueOf(this.quantity));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        OrderItem orderItem = (OrderItem) o;
+        return Objects.equals(id, orderItem.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
     }
 }

@@ -13,7 +13,6 @@ public record OrderResponse(
         UUID customerId,
         OrderStatus status,
         BigDecimal totalAmount,
-        String notes,
         List<OrderItemResponse> items,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

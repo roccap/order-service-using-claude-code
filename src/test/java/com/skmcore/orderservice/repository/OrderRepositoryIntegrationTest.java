@@ -1,7 +1,9 @@
 package com.skmcore.orderservice.repository;
 
+import com.skmcore.orderservice.model.Customer;
 import com.skmcore.orderservice.model.Order;
 import com.skmcore.orderservice.model.OrderStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -29,46 +31,59 @@ class OrderRepositoryIntegrationTest {
     @Autowired
     private OrderRepository orderRepository;
 
+    @Autowired
+    private CustomerRepository customerRepository;
+
+    private Customer savedCustomer;
+
+    @BeforeEach
+    void setUp() {
+        savedCustomer = customerRepository.save(Customer.builder()
+                .email("test-" + UUID.randomUUID() + "@example.com")
+                .fullName("Test User")
+                .build());
+    }
+
     @Test
     void save_persistsOrderWithGeneratedId() {
         Order order = Order.builder()
-                .orderNumber("ORD-IT-001")
-                .customerId(UUID.randomUUID())
-                .status(OrderStatus.PENDING)
+                .customer(savedCustomer)
+                .status(OrderStatus.CREATED)
                 .totalAmount(new BigDecimal("49.99"))
                 .build();
 
         Order saved = orderRepository.save(order);
 
         assertThat(saved.getId()).isNotNull();
-        assertThat(saved.getOrderNumber()).isEqualTo("ORD-IT-001");
-        assertThat(saved.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(saved.getOrderNumber()).startsWith("ORD-");
+        assertThat(saved.getStatus()).isEqualTo(OrderStatus.CREATED);
     }
 
     @Test
-    void findByCustomerId_returnsOnlyMatchingCustomerOrders() {
-        UUID targetCustomer = UUID.randomUUID();
-        UUID otherCustomer = UUID.randomUUID();
+    void findByCustomer_Id_returnsOnlyMatchingCustomerOrders() {
+        Customer otherCustomer = customerRepository.save(Customer.builder()
+                .email("other-" + UUID.randomUUID() + "@example.com")
+                .fullName("Other User")
+                .build());
 
         orderRepository.saveAll(List.of(
-                orderFor(targetCustomer, "ORD-IT-002", OrderStatus.PENDING),
-                orderFor(targetCustomer, "ORD-IT-003", OrderStatus.CONFIRMED),
-                orderFor(otherCustomer, "ORD-IT-004", OrderStatus.PENDING)
+                orderFor(savedCustomer, OrderStatus.CREATED),
+                orderFor(savedCustomer, OrderStatus.CONFIRMED),
+                orderFor(otherCustomer, OrderStatus.CREATED)
         ));
 
-        List<Order> results = orderRepository.findByCustomerId(targetCustomer);
+        List<Order> results = orderRepository.findByCustomer_Id(savedCustomer.getId());
 
         assertThat(results).hasSize(2);
-        assertThat(results).extracting(Order::getCustomerId).containsOnly(targetCustomer);
+        assertThat(results).extracting(o -> o.getCustomer().getId()).containsOnly(savedCustomer.getId());
     }
 
     @Test
     void findByStatus_returnsOrdersWithMatchingStatus() {
-        UUID customer = UUID.randomUUID();
         orderRepository.saveAll(List.of(
-                orderFor(customer, "ORD-IT-005", OrderStatus.SHIPPED),
-                orderFor(customer, "ORD-IT-006", OrderStatus.SHIPPED),
-                orderFor(customer, "ORD-IT-007", OrderStatus.DELIVERED)
+                orderFor(savedCustomer, OrderStatus.SHIPPED),
+                orderFor(savedCustomer, OrderStatus.SHIPPED),
+                orderFor(savedCustomer, OrderStatus.DELIVERED)
         ));
 
         List<Order> shipped = orderRepository.findByStatus(OrderStatus.SHIPPED);
@@ -77,10 +92,9 @@ class OrderRepositoryIntegrationTest {
         assertThat(shipped).extracting(Order::getStatus).containsOnly(OrderStatus.SHIPPED);
     }
 
-    private Order orderFor(UUID customerId, String orderNumber, OrderStatus status) {
+    private Order orderFor(Customer customer, OrderStatus status) {
         return Order.builder()
-                .orderNumber(orderNumber)
-                .customerId(customerId)
+                .customer(customer)
                 .status(status)
                 .totalAmount(new BigDecimal("100.00"))
                 .build();

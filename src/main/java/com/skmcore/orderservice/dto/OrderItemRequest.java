@@ -6,11 +6,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 public record OrderItemRequest(
-        @NotNull(message = "Product ID is required")
-        UUID productId,
+        @NotBlank(message = "Product ID is required")
+        String productId,
 
         @NotBlank(message = "Product name is required")
         String productName,

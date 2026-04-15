@@ -11,6 +11,7 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface OrderMapper {
 
+    @Mapping(target = "customerId", source = "customer.id")
     OrderResponse toResponse(Order order);
 
     OrderItemResponse toItemResponse(OrderItem item);
