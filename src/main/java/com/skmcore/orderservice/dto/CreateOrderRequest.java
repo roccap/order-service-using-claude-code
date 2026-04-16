@@ -13,5 +13,9 @@ public record CreateOrderRequest(
 
         @NotEmpty(message = "Order must contain at least one item")
         @Valid
-        List<OrderItemRequest> items
+        List<OrderItemRequest> items,
+
+        @NotNull(message = "Shipping address is required")
+        @Valid
+        AddressRequest shippingAddress
 ) {}

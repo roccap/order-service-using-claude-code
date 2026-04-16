@@ -2,6 +2,7 @@ package com.skmcore.orderservice.service;
 
 import com.skmcore.orderservice.dto.CreateOrderRequest;
 import com.skmcore.orderservice.dto.OrderResponse;
+import com.skmcore.orderservice.dto.PagedResponse;
 import com.skmcore.orderservice.dto.UpdateOrderStatusRequest;
 import com.skmcore.orderservice.event.OrderCreatedEvent;
 import com.skmcore.orderservice.exception.EntityNotFoundException;
@@ -17,6 +18,8 @@ import com.skmcore.orderservice.repository.OrderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
@@ -54,10 +57,9 @@ public class OrderServiceImpl implements OrderService {
         Customer customer = customerRepository.findById(request.customerId())
                 .orElseThrow(() -> new EntityNotFoundException("Customer", request.customerId()));
 
-        Order order = Order.builder()
-                .customer(customer)
-                .status(OrderStatus.CREATED)
-                .build();
+        Order order = orderMapper.toEntity(request);
+        order.setCustomer(customer);
+        order.setStatus(OrderStatus.CREATED);
 
         request.items().forEach(itemRequest -> {
             OrderItem item = orderMapper.toItemEntity(itemRequest);
@@ -88,6 +90,33 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
+    public OrderResponse getOrderByOrderNumber(String orderNumber) {
+        return orderMapper.toResponse(findOrderByOrderNumber(orderNumber));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PagedResponse<OrderResponse> getOrders(UUID customerId, OrderStatus status, Pageable pageable) {
+        Page<Order> page;
+        if (customerId != null && status != null) {
+            page = orderRepository.findByCustomer_IdAndStatus(customerId, status, pageable);
+        } else if (customerId != null) {
+            page = orderRepository.findByCustomerId(customerId, pageable);
+        } else if (status != null) {
+            page = orderRepository.findByStatus(status, pageable);
+        } else {
+            page = orderRepository.findAll(pageable);
+        }
+        return new PagedResponse<>(
+                page.getContent().stream().map(orderMapper::toResponse).toList(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<OrderResponse> getOrdersByCustomerId(UUID customerId) {
         return orderRepository.findByCustomer_Id(customerId).stream()
                 .map(orderMapper::toResponse)
@@ -103,38 +132,43 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public OrderResponse updateOrderStatus(UUID id, UpdateOrderStatusRequest request) {
-        Order order = findOrderById(id);
+    public OrderResponse updateOrderStatus(String orderNumber, UpdateOrderStatusRequest request) {
+        Order order = findOrderByOrderNumber(orderNumber);
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
-            throw new OrderAlreadyCancelledException(id);
+            throw new OrderAlreadyCancelledException(order.getId());
         }
 
-        log.info("Transitioning order {} from {} to {}", id, order.getStatus(), request.status());
+        log.info("Transitioning order {} from {} to {}", orderNumber, order.getStatus(), request.status());
         order.transitionTo(request.status());
 
         return orderMapper.toResponse(orderRepository.save(order));
     }
 
     @Override
-    public void cancelOrder(UUID id) {
-        Order order = findOrderById(id);
+    public void cancelOrder(String orderNumber) {
+        Order order = findOrderByOrderNumber(orderNumber);
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
-            throw new OrderAlreadyCancelledException(id);
+            throw new OrderAlreadyCancelledException(order.getId());
         }
 
         try {
             order.cancel();
             orderRepository.save(order);
-            log.info("Order {} cancelled", id);
+            log.info("Order {} cancelled", orderNumber);
         } catch (IllegalStateException ex) {
-            throw new InvalidOrderStateException(id, order.getStatus(), OrderStatus.CANCELLED);
+            throw new InvalidOrderStateException(order.getId(), order.getStatus(), OrderStatus.CANCELLED);
         }
     }
 
     private Order findOrderById(UUID id) {
         return orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order", id));
+    }
+
+    private Order findOrderByOrderNumber(String orderNumber) {
+        return orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new EntityNotFoundException("Order", orderNumber));
     }
 }

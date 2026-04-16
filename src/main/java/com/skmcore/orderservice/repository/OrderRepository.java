@@ -24,6 +24,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     // Used by the service layer (non-paginated)
     List<Order> findByCustomer_Id(UUID customerId);
 
+    Page<Order> findByCustomer_IdAndStatus(UUID customerId, OrderStatus status, Pageable pageable);
+
     // Paginated variant — uses @Query to navigate the ManyToOne association explicitly
     @Query("SELECT o FROM Order o WHERE o.customer.id = :customerId")
     Page<Order> findByCustomerId(@Param("customerId") UUID customerId, Pageable pageable);

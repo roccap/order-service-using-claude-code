@@ -36,6 +36,14 @@ public class GlobalExceptionHandler {
                 .body(error(409, "Conflict", ex.getMessage(), request, null));
     }
 
+    @ExceptionHandler(DuplicateEmailException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateEmail(
+            DuplicateEmailException ex, HttpServletRequest request) {
+        log.warn("Duplicate email: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(error(409, "Conflict", ex.getMessage(), request, null));
+    }
+
     @ExceptionHandler(InvalidOrderStateException.class)
     public ResponseEntity<ErrorResponse> handleInvalidState(
             InvalidOrderStateException ex, HttpServletRequest request) {

@@ -1,5 +1,6 @@
 package com.skmcore.orderservice.service;
 
+import com.skmcore.orderservice.dto.AddressRequest;
 import com.skmcore.orderservice.dto.CreateOrderRequest;
 import com.skmcore.orderservice.dto.OrderItemRequest;
 import com.skmcore.orderservice.dto.OrderResponse;
@@ -55,6 +56,7 @@ class OrderServiceImplTest {
     private UUID customerId;
     private UUID orderId;
     private Customer customer;
+    private AddressRequest address;
 
     @BeforeEach
     void setUp() {
@@ -65,20 +67,23 @@ class OrderServiceImplTest {
                 .email("test@example.com")
                 .fullName("Test User")
                 .build();
+        address = new AddressRequest("123 Main St", "Springfield", "IL", "62701", "US");
     }
 
     @Test
     void createOrder_persistsOrderAndPublishesEvent() {
         OrderItemRequest itemRequest = new OrderItemRequest(
                 "PROD-001", "Widget", 2, new BigDecimal("9.99"));
-        CreateOrderRequest request = new CreateOrderRequest(customerId, List.of(itemRequest));
+        CreateOrderRequest request = new CreateOrderRequest(customerId, List.of(itemRequest), address);
 
         OrderItem item = OrderItem.builder()
-                .productId(itemRequest.productId())
-                .productName(itemRequest.productName())
-                .quantity(itemRequest.quantity())
-                .unitPrice(itemRequest.unitPrice())
+                .productId("PROD-001")
+                .productName("Widget")
+                .quantity(2)
+                .unitPrice(new BigDecimal("9.99"))
                 .build();
+
+        Order mappedOrder = Order.builder().build();
 
         Order savedOrder = Order.builder()
                 .id(orderId)
@@ -90,17 +95,19 @@ class OrderServiceImplTest {
                 .build();
 
         OrderResponse expectedResponse = new OrderResponse(
-                orderId, "ORD-ABCD1234", customerId, OrderStatus.CREATED,
-                new BigDecimal("19.98"), List.of(), null, null);
+                orderId, "ORD-ABCD1234", OrderStatus.CREATED,
+                "test@example.com", "Test User",
+                List.of(), null, new BigDecimal("19.98"), null, null);
 
         when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
+        when(orderMapper.toEntity(request)).thenReturn(mappedOrder);
         when(orderMapper.toItemEntity(itemRequest)).thenReturn(item);
         when(orderRepository.save(any(Order.class))).thenReturn(savedOrder);
         when(orderMapper.toResponse(savedOrder)).thenReturn(expectedResponse);
 
         OrderResponse result = orderService.createOrder(request);
 
-        assertThat(result.customerId()).isEqualTo(customerId);
+        assertThat(result.customerEmail()).isEqualTo("test@example.com");
         assertThat(result.status()).isEqualTo(OrderStatus.CREATED);
         assertThat(result.totalAmount()).isEqualByComparingTo("19.98");
         verify(orderRepository).save(any(Order.class));
@@ -110,7 +117,7 @@ class OrderServiceImplTest {
     @Test
     void createOrder_throwsEntityNotFoundException_whenCustomerNotFound() {
         CreateOrderRequest request = new CreateOrderRequest(customerId, List.of(
-                new OrderItemRequest("PROD-001", "Widget", 1, BigDecimal.TEN)));
+                new OrderItemRequest("PROD-001", "Widget", 1, BigDecimal.TEN)), address);
 
         when(customerRepository.findById(customerId)).thenReturn(Optional.empty());
 
@@ -123,7 +130,9 @@ class OrderServiceImplTest {
     void getOrderById_returnsOrder_whenFound() {
         Order order = Order.builder().id(orderId).customer(customer).status(OrderStatus.CREATED).build();
         OrderResponse expected = new OrderResponse(
-                orderId, "ORD-ABCD1234", customerId, OrderStatus.CREATED, BigDecimal.TEN, List.of(), null, null);
+                orderId, "ORD-ABCD1234", OrderStatus.CREATED,
+                "test@example.com", "Test User",
+                List.of(), null, BigDecimal.TEN, null, null);
 
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
         when(orderMapper.toResponse(order)).thenReturn(expected);
@@ -142,17 +151,19 @@ class OrderServiceImplTest {
 
     @Test
     void cancelOrder_setsStatusToCancelled_whenAllowed() {
+        String orderNumber = "ORD-ABCD1234";
         Order order = Order.builder()
                 .id(orderId)
+                .orderNumber(orderNumber)
                 .customer(customer)
                 .status(OrderStatus.CREATED)
                 .totalAmount(BigDecimal.TEN)
                 .build();
 
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
 
-        orderService.cancelOrder(orderId);
+        orderService.cancelOrder(orderNumber);
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(captor.capture());
@@ -161,49 +172,57 @@ class OrderServiceImplTest {
 
     @Test
     void cancelOrder_throwsOrderAlreadyCancelledException_whenAlreadyCancelled() {
+        String orderNumber = "ORD-ABCD1234";
         Order order = Order.builder()
                 .id(orderId)
+                .orderNumber(orderNumber)
                 .status(OrderStatus.CANCELLED)
                 .build();
 
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
 
-        assertThatThrownBy(() -> orderService.cancelOrder(orderId))
+        assertThatThrownBy(() -> orderService.cancelOrder(orderNumber))
                 .isInstanceOf(OrderAlreadyCancelledException.class);
     }
 
     @Test
     void updateOrderStatus_transitionsStatus_whenOrderIsActive() {
+        String orderNumber = "ORD-ABCD1234";
         Order order = Order.builder()
                 .id(orderId)
+                .orderNumber(orderNumber)
                 .customer(customer)
                 .status(OrderStatus.CREATED)
                 .totalAmount(BigDecimal.TEN)
                 .build();
         UpdateOrderStatusRequest request = new UpdateOrderStatusRequest(OrderStatus.CONFIRMED);
         OrderResponse expected = new OrderResponse(
-                orderId, "ORD-ABCD1234", customerId, OrderStatus.CONFIRMED, BigDecimal.TEN, List.of(), null, null);
+                orderId, "ORD-ABCD1234", OrderStatus.CONFIRMED,
+                "test@example.com", "Test User",
+                List.of(), null, BigDecimal.TEN, null, null);
 
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
         when(orderRepository.save(order)).thenReturn(order);
         when(orderMapper.toResponse(order)).thenReturn(expected);
 
-        OrderResponse result = orderService.updateOrderStatus(orderId, request);
+        OrderResponse result = orderService.updateOrderStatus(orderNumber, request);
 
         assertThat(result.status()).isEqualTo(OrderStatus.CONFIRMED);
     }
 
     @Test
     void updateOrderStatus_throwsOrderAlreadyCancelledException_whenCancelled() {
+        String orderNumber = "ORD-ABCD1234";
         Order order = Order.builder()
                 .id(orderId)
+                .orderNumber(orderNumber)
                 .status(OrderStatus.CANCELLED)
                 .build();
         UpdateOrderStatusRequest request = new UpdateOrderStatusRequest(OrderStatus.CONFIRMED);
 
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(order));
 
-        assertThatThrownBy(() -> orderService.updateOrderStatus(orderId, request))
+        assertThatThrownBy(() -> orderService.updateOrderStatus(orderNumber, request))
                 .isInstanceOf(OrderAlreadyCancelledException.class);
     }
 }
